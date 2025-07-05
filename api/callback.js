@@ -1,10 +1,12 @@
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 export default async function handler(req, res) {
   const code = req.query.code;
 
   if (!code) {
-    return res.status(400).json({ error: "Brak kodu autoryzacyjnego" });
+    console.error("Brak kodu autoryzacyjnego w zapytaniu.");
+    return res.status(400).send("Brak kodu autoryzacyjnego.");
   }
 
   const CLIENT_ID = process.env.CLIENT_ID;
@@ -31,7 +33,8 @@ export default async function handler(req, res) {
 
     if (!tokenRes.ok) {
       const errorText = await tokenRes.text();
-      return res.status(500).json({ error: "Błąd tokenu", details: errorText });
+      console.error("Błąd podczas pobierania tokenu:", errorText);
+      return res.status(500).send("Nie udało się uzyskać tokenu dostępu.");
     }
 
     const tokenJson = await tokenRes.json();
@@ -43,9 +46,19 @@ export default async function handler(req, res) {
       }
     });
 
+    if (!userRes.ok) {
+      const errorUser = await userRes.text();
+      console.error("Błąd podczas pobierania użytkownika:", errorUser);
+      return res.status(500).send("Nie udało się pobrać danych użytkownika.");
+    }
+
     const userData = await userRes.json();
-    return res.status(200).json({ user: userData });
+    console.log("✅ Użytkownik zweryfikowany:", userData);
+
+    // ✅ PRZEKIEROWANIE NA STRONĘ Z PODZIĘKOWANIEM
+    return res.redirect("/dziekujemy");
   } catch (error) {
-    return res.status(500).json({ error: "Wewnętrzny błąd serwera", details: error.message });
+    console.error("❌ Wewnętrzny błąd serwera:", error.message);
+    return res.status(500).send("Wystąpił wewnętrzny błąd serwera.");
   }
 }
