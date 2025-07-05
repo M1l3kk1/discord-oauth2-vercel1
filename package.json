@@ -11,6 +11,6 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "node-fetch": "^3.3.0"
+    "node-fetch": "^2.6.1"
   }
 }
