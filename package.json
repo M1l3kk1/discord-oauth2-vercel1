@@ -1,12 +1,8 @@
+ 
 {
+  "name": "discord-oauth2-api",
+  "version": "1.0.0",
   "dependencies": {
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest"
-  },
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "node-fetch": "^2.6.1"
   }
 }
