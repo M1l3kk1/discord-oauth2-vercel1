@@ -1,20 +1,22 @@
-import fetch from "node-fetch";
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 export default async function handler(req, res) {
   const code = req.query.code;
+
   if (!code) {
-    res.status(400).json({ error: "Brak kodu autoryzacyjnego" });
-    return;
+    return res.status(400).json({ error: "Brak kodu autoryzacyjnego" });
   }
 
-  const clientSecret = process.env.CLIENT_SECRET;
+  const CLIENT_ID = process.env.CLIENT_ID;
+  const CLIENT_SECRET = process.env.CLIENT_SECRET;
+  const REDIRECT_URI = process.env.REDIRECT_URI;
 
   const data = new URLSearchParams({
-    client_id: process.env.CLIENT_ID,
-    client_secret: clientSecret,
+    client_id: CLIENT_ID,
+    client_secret: CLIENT_SECRET,
     grant_type: "authorization_code",
     code,
-    redirect_uri: process.env.REDIRECT_URI,
+    redirect_uri: REDIRECT_URI,
     scope: "identify guilds.join bot applications.commands guilds"
   });
 
@@ -28,9 +30,8 @@ export default async function handler(req, res) {
     });
 
     if (!tokenRes.ok) {
-      const errorData = await tokenRes.text();
-      res.status(500).json({ error: "Nie udało się wymienić kodu na token", details: errorData });
-      return;
+      const errorText = await tokenRes.text();
+      return res.status(500).json({ error: "Błąd tokenu", details: errorText });
     }
 
     const tokenJson = await tokenRes.json();
@@ -43,9 +44,8 @@ export default async function handler(req, res) {
     });
 
     const userData = await userRes.json();
-
-    res.status(200).json({ user: userData });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(200).json({ user: userData });
+  } catch (error) {
+    return res.status(500).json({ error: "Wewnętrzny błąd serwera", details: error.message });
   }
 }
