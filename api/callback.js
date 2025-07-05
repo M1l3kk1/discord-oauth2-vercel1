@@ -1,12 +1,10 @@
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 export default async function handler(req, res) {
   const code = req.query.code;
 
   if (!code) {
-    console.error("Brak kodu autoryzacyjnego w zapytaniu.");
-    return res.status(400).send("Brak kodu autoryzacyjnego.");
+    return res.status(400).json({ error: "Brak kodu autoryzacyjnego" });
   }
 
   const CLIENT_ID = process.env.CLIENT_ID;
@@ -33,8 +31,7 @@ export default async function handler(req, res) {
 
     if (!tokenRes.ok) {
       const errorText = await tokenRes.text();
-      console.error("Błąd podczas pobierania tokenu:", errorText);
-      return res.status(500).send("Nie udało się uzyskać tokenu dostępu.");
+      return res.status(500).json({ error: "Błąd tokenu", details: errorText });
     }
 
     const tokenJson = await tokenRes.json();
@@ -46,19 +43,9 @@ export default async function handler(req, res) {
       }
     });
 
-    if (!userRes.ok) {
-      const errorUser = await userRes.text();
-      console.error("Błąd podczas pobierania użytkownika:", errorUser);
-      return res.status(500).send("Nie udało się pobrać danych użytkownika.");
-    }
-
     const userData = await userRes.json();
-    console.log("✅ Użytkownik zweryfikowany:", userData);
-
-    // ✅ PRZEKIEROWANIE NA STRONĘ Z PODZIĘKOWANIEM
-    return res.redirect("/dziekujemy");
+    return res.status(200).json({ user: userData });
   } catch (error) {
-    console.error("❌ Wewnętrzny błąd serwera:", error.message);
-    return res.status(500).send("Wystąpił wewnętrzny błąd serwera.");
+    return res.status(500).json({ error: "Wewnętrzny błąd serwera", details: error.message });
   }
 }
