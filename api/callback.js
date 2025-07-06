@@ -21,6 +21,7 @@ export default async function handler(req, res) {
   });
 
   try {
+    // Krok 1: Wymiana kodu na token dostępu
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       body: data,
@@ -31,12 +32,14 @@ export default async function handler(req, res) {
 
     if (!tokenRes.ok) {
       const errorText = await tokenRes.text();
-      return res.status(500).json({ error: "Błąd tokenu", details: errorText });
+      // W przypadku błędu, lepiej nie przekierowywać, a pokazać błąd
+      return res.status(500).json({ error: "Błąd podczas pobierania tokenu z Discorda", details: errorText });
     }
 
     const tokenJson = await tokenRes.json();
     const access_token = tokenJson.access_token;
 
+    // Krok 2: Pobranie danych użytkownika przy użyciu tokenu
     const userRes = await fetch("https://discord.com/api/users/@me", {
       headers: {
         Authorization: `Bearer ${access_token}`
@@ -44,8 +47,15 @@ export default async function handler(req, res) {
     });
 
     const userData = await userRes.json();
-    return res.status(200).json({ user: userData });
+    
+    // Tutaj możesz wykonać dodatkowe operacje, np. zapisać dane użytkownika do bazy danych
+    console.log(`Użytkownik ${userData.username} (#${userData.id}) pomyślnie zakończył autoryzację.`);
+
+    // Krok 3: Przekierowanie użytkownika na stronę z podziękowaniem ✅
+    return res.redirect('/autoryzacja.html');
+
   } catch (error) {
+    // Obsługa ewentualnych błędów sieciowych lub innych
     return res.status(500).json({ error: "Wewnętrzny błąd serwera", details: error.message });
   }
 }
