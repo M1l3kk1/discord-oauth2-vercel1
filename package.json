@@ -1,8 +1,8 @@
- 
 {
   "name": "discord-oauth2-api",
   "version": "1.0.0",
   "dependencies": {
-    "node-fetch": "^2.6.1"
+    "node-fetch": "^3.3.2",
+    "pg": "^8.11.3"
   }
 }
