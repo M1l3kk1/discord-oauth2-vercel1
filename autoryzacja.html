@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autoryzacja pomyślna</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: 'Roboto', sans-serif; /* Prosta, czytelna czcionka */
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            padding: 50px;
+            background-color: #1e1e1e;
+            border-radius: 10px;
+            border: 1px solid #c00; /* Czerwona ramka */
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.3); /* Delikatna czerwona poświata */
+            max-width: 550px;
+            width: 100%;
+            animation: fadeIn 0.8s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            color: #ff3333;
+            font-size: 2.5em; /* Odpowiedni rozmiar dla nagłówka */
+            font-weight: 900; /* Pogrubiona czcionka */
+            margin: 0 0 10px 0;
+            letter-spacing: 1px;
+        }
+        p {
+            font-size: 1.2em;
+            line-height: 1.6;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Wataha KipstaR'a</h1>
+        <p>Autoryzacja przebiegła pomyślnie. Możesz teraz zamknąć to okno.</p>
+    </div>
+</body>
+</html>
