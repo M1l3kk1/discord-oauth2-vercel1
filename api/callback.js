@@ -4,18 +4,20 @@ import { Pool } from 'pg';
 
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
-// Konfiguracja połączenia z bazą danych Neon
+// =======================================================
+// ▼▼▼ POPRAWIONA KONFIGURACJA POŁĄCZENIA ▼▼▼
+// =======================================================
+// Przekazujemy adres URL bezpośrednio do konstruktora Pool.
+// Biblioteka 'pg' sama odczyta z niego potrzebę użycia SSL.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
 });
+// =======================================================
+
 
 async function initializeDatabase() {
   const client = await pool.connect();
   try {
-    // Tworzymy tabelę 'users', jeśli nie istnieje
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id BIGINT PRIMARY KEY,
@@ -26,13 +28,19 @@ async function initializeDatabase() {
     console.log("✅ Inicjalizacja bazy danych zakończona. Tabela 'users' gotowa.");
   } catch (err) {
     console.error('❌ Błąd podczas inicjalizacji bazy danych:', err.stack);
+    // Rzucamy błąd dalej, aby Vercel wiedział, że funkcja startowa zawiodła
+    throw err;
   } finally {
     client.release();
   }
 }
 
-// Wywołujemy inicjalizację raz na starcie, aby upewnić się, że tabela istnieje
-initializeDatabase().catch(console.error);
+// Wywołujemy inicjalizację. Jeśli się nie powiedzie, funkcja nie będzie działać.
+initializeDatabase().catch(err => {
+    console.error("Krytyczny błąd inicjalizacji bazy danych. Funkcja nie będzie dostępna.", err);
+    // Proces zostanie zakończony z błędem, co jest pożądane w tym przypadku
+    process.exit(1);
+});
 
 
 export default async function handler(req, res) {
@@ -51,29 +59,24 @@ export default async function handler(req, res) {
   });
 
   try {
-    // Krok 1: Wymiana kodu na token
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       body: data,
     });
 
-    if (!tokenRes.ok) throw new Error(await tokenRes.text());
+    if (!tokenRes.ok) throw new Error(`Błąd tokenu: ${await tokenRes.text()}`);
 
     const tokenJson = await tokenRes.json();
     const access_token = tokenJson.access_token;
 
-    // Krok 2: Pobranie danych użytkownika
     const userRes = await fetch("https://discord.com/api/users/@me", {
       headers: { Authorization: `Bearer ${access_token}` },
     });
     
-    if (!userRes.ok) throw new Error(await userRes.text());
+    if (!userRes.ok) throw new Error(`Błąd pobierania użytkownika: ${await userRes.text()}`);
     
     const userData = await userRes.json();
     
-    // =======================================================
-    // ▼▼▼ KROK 3: ZAPIS UŻYTKOWNIKA DO BAZY DANYCH NEON ▼▼▼
-    // =======================================================
     try {
       const client = await pool.connect();
       try {
@@ -82,20 +85,18 @@ export default async function handler(req, res) {
         await client.query(sql, values);
         console.log(`✅ Zapisano użytkownika w bazie danych: ${userData.username} (${userData.id})`);
       } finally {
-        // Zawsze zwalniaj klienta z powrotem do puli
         client.release();
       }
     } catch (dbError) {
         console.error('❌ Błąd zapisu do bazy danych:', dbError.stack);
+        // Rzucamy błąd, aby główny blok catch go obsłużył
+        throw dbError;
     }
-    // =======================================================
     
-    // Krok 4: Przekierowanie użytkownika
     return res.redirect('/autoryzacja.html');
 
   } catch (error) {
     console.error("❌ Wystąpił błąd w procesie autoryzacji:", error);
-    // Możesz przekierować na stronę błędu
-    return res.status(500).send("Wystąpił wewnętrzny błąd serwera.");
+    return res.status(500).send("Wystąpił wewnętrzny błąd serwera. Sprawdź logi na Vercel.");
   }
 }
