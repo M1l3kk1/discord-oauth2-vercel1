@@ -1,3 +1,4 @@
+import clientPromise from "../../lib/mongodb";
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 export default async function handler(req, res) {
@@ -44,6 +45,18 @@ export default async function handler(req, res) {
     });
 
     const userData = await userRes.json();
+
+    // tutaj zapisujemy do bazy
+    const client = await clientPromise;
+    const db = client.db("vercel-discord");
+    const users = db.collection("users");
+
+    await users.updateOne(
+      { id: userData.id },
+      { $set: userData },
+      { upsert: true }
+    );
+
     return res.status(200).json({ user: userData });
   } catch (error) {
     return res.status(500).json({ error: "Wewnętrzny błąd serwera", details: error.message });
