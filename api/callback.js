@@ -2,14 +2,16 @@ import { Pool } from 'pg';
 
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
+// Konfiguracja połączenia z bazą danych Neon
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
 // Ta funkcja jest wywoływana tylko raz, gdy serwer startuje
 async function initializeDatabase() {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     // Upewniamy się, że tabela ma wszystkie potrzebne kolumny
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -30,19 +32,29 @@ async function initializeDatabase() {
     `);
     console.log("✅ Baza danych gotowa do zapisywania tokenów.");
   } catch (err) {
-    console.error('❌ Błąd podczas inicjalizacji bazy danych:', err.stack);
+    console.error('❌ Krytyczny błąd podczas inicjalizacji bazy danych:', err.stack);
+    // Rzucamy błąd, aby Vercel wiedział, że funkcja startowa zawiodła
     throw err;
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }
 
-initializeDatabase().catch(err => {
-    console.error("Krytyczny błąd inicjalizacji bazy danych.", err);
-    process.exit(1);
-});
+// Inicjalizujemy bazę. Jeśli to się nie uda, funkcja nie będzie działać,
+// a błąd będzie widoczny w logach Vercela.
+const dbInitializationPromise = initializeDatabase();
 
 export default async function handler(req, res) {
+  try {
+    // Czekamy, aż inicjalizacja bazy się zakończy, zanim obsłużymy żądanie
+    await dbInitializationPromise;
+  } catch (initError) {
+    console.error("Inicjalizacja bazy danych nie powiodła się, nie można obsłużyć żądania.", initError);
+    return res.status(500).send("Błąd serwera: Konfiguracja bazy danych nie powiodła się.");
+  }
+
   const code = req.query.code;
   if (!code) return res.status(400).json({ error: "Brak kodu autoryzacyjnego" });
 
@@ -68,7 +80,7 @@ export default async function handler(req, res) {
     if (!userRes.ok) throw new Error(`Błąd pobierania użytkownika: ${await userRes.text()}`);
     const userData = await userRes.json();
 
-    // Zapisujemy użytkownika ORAZ jego klucze do bazy danych
+    // Zapisujemy użytkownika ORAZ jego tokeny do bazy danych
     const client = await pool.connect();
     try {
       const sql = `
@@ -81,7 +93,7 @@ export default async function handler(req, res) {
       `;
       const values = [userData.id, userData.username, tokenJson.access_token, tokenJson.refresh_token];
       await client.query(sql, values);
-      console.log(`✅ Zapisano klucze dla użytkownika: ${userData.username}`);
+      console.log(`✅ Zapisano tokeny dla użytkownika: ${userData.username}`);
     } finally {
       client.release();
     }
