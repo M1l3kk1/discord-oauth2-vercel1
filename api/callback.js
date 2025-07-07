@@ -1,54 +1,50 @@
-// Plik: api/callback.js
-
 import { Pool } from 'pg';
 
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
-// =======================================================
-// ▼▼▼ POPRAWIONA KONFIGURACJA POŁĄCZENIA ▼▼▼
-// =======================================================
-// Przekazujemy adres URL bezpośrednio do konstruktora Pool.
-// Biblioteka 'pg' sama odczyta z niego potrzebę użycia SSL.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
-// =======================================================
 
-
+// Ta funkcja jest wywoływana tylko raz, gdy serwer startuje
 async function initializeDatabase() {
   const client = await pool.connect();
   try {
+    // Upewniamy się, że tabela ma wszystkie potrzebne kolumny
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id BIGINT PRIMARY KEY,
         username VARCHAR(255) NOT NULL,
+        access_token TEXT,
+        refresh_token TEXT,
+        expires_at TIMESTAMPTZ,
         verified_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log("✅ Inicjalizacja bazy danych zakończona. Tabela 'users' gotowa.");
+    // Dodajemy nowe kolumny, jeśli ich brakuje
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS access_token TEXT,
+      ADD COLUMN IF NOT EXISTS refresh_token TEXT,
+      ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+    `);
+    console.log("✅ Baza danych gotowa do zapisywania tokenów.");
   } catch (err) {
     console.error('❌ Błąd podczas inicjalizacji bazy danych:', err.stack);
-    // Rzucamy błąd dalej, aby Vercel wiedział, że funkcja startowa zawiodła
     throw err;
   } finally {
     client.release();
   }
 }
 
-// Wywołujemy inicjalizację. Jeśli się nie powiedzie, funkcja nie będzie działać.
 initializeDatabase().catch(err => {
-    console.error("Krytyczny błąd inicjalizacji bazy danych. Funkcja nie będzie dostępna.", err);
-    // Proces zostanie zakończony z błędem, co jest pożądane w tym przypadku
+    console.error("Krytyczny błąd inicjalizacji bazy danych.", err);
     process.exit(1);
 });
 
-
 export default async function handler(req, res) {
   const code = req.query.code;
-
-  if (!code) {
-    return res.status(400).json({ error: "Brak kodu autoryzacyjnego" });
-  }
+  if (!code) return res.status(400).json({ error: "Brak kodu autoryzacyjnego" });
 
   const data = new URLSearchParams({
     client_id: process.env.CLIENT_ID,
@@ -63,40 +59,36 @@ export default async function handler(req, res) {
       method: "POST",
       body: data,
     });
-
     if (!tokenRes.ok) throw new Error(`Błąd tokenu: ${await tokenRes.text()}`);
-
     const tokenJson = await tokenRes.json();
-    const access_token = tokenJson.access_token;
-
+    
     const userRes = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${access_token}` },
+      headers: { Authorization: `Bearer ${tokenJson.access_token}` },
     });
-    
     if (!userRes.ok) throw new Error(`Błąd pobierania użytkownika: ${await userRes.text()}`);
-    
     const userData = await userRes.json();
-    
+
+    // Zapisujemy użytkownika ORAZ jego klucze do bazy danych
+    const client = await pool.connect();
     try {
-      const client = await pool.connect();
-      try {
-        const sql = 'INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING;';
-        const values = [userData.id, userData.username];
-        await client.query(sql, values);
-        console.log(`✅ Zapisano użytkownika w bazie danych: ${userData.username} (${userData.id})`);
-      } finally {
-        client.release();
-      }
-    } catch (dbError) {
-        console.error('❌ Błąd zapisu do bazy danych:', dbError.stack);
-        // Rzucamy błąd, aby główny blok catch go obsłużył
-        throw dbError;
+      const sql = `
+        INSERT INTO users (id, username, access_token, refresh_token, expires_at)
+        VALUES ($1, $2, $3, $4, NOW() + INTERVAL '7 day')
+        ON CONFLICT (id) DO UPDATE SET
+          access_token = EXCLUDED.access_token,
+          refresh_token = EXCLUDED.refresh_token,
+          expires_at = EXCLUDED.expires_at;
+      `;
+      const values = [userData.id, userData.username, tokenJson.access_token, tokenJson.refresh_token];
+      await client.query(sql, values);
+      console.log(`✅ Zapisano klucze dla użytkownika: ${userData.username}`);
+    } finally {
+      client.release();
     }
     
     return res.redirect('/autoryzacja.html');
-
   } catch (error) {
-    console.error("❌ Wystąpił błąd w procesie autoryzacji:", error);
-    return res.status(500).send("Wystąpił wewnętrzny błąd serwera. Sprawdź logi na Vercel.");
+    console.error("❌ Błąd w procesie autoryzacji:", error);
+    return res.status(500).send("Wystąpił wewnętrzny błąd serwera.");
   }
 }
